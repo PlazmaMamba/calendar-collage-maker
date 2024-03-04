@@ -1,4 +1,4 @@
-# Image Processing and Organization Tool
+# Python Image Collage Maker
 
 This Python script provides a comprehensive solution for processing a collection of images within a directory. It automates the task of sorting images by date, correcting their orientation based on EXIF metadata, scaling them down, and dynamically arranging them on a canvas. This tool is ideal for generating organized photo collections, preparing images for digital albums, or any application that requires automated image handling and layout.
 
