@@ -2,6 +2,10 @@ import os, sys
 from PIL import Image, ExifTags
 from datetime import datetime
 
+
+
+
+
 LANDSCAPE_IMG_HEIGHT = 3000
 LANDSCAPE_IMG_WIDTH = 4000
 PORTRAIT_IMG_HEIGHT = 4000
@@ -11,13 +15,10 @@ LANDSCAPE_SIZE = (LANDSCAPE_IMG_WIDTH, LANDSCAPE_IMG_HEIGHT)
 PORTRAIT_SIZE = (PORTRAIT_IMG_WIDTH, PORTRAIT_IMG_HEIGHT)
 
 def get_directory():
-    directory = input("Enter directory: ")
-    image_paths = []
-    
-    for filename in os.listdir(directory):
-        image_path = os.path.join(directory, filename)
-        image_paths.append(image_path)
+    directory = input(r"Enter directory: ")
+    image_paths = [os.path.join(directory, filename) for filename in os.listdir(directory)]
     return image_paths
+
 
 def fix_rotation_of_image_from_metadata(image):
     try:
@@ -38,36 +39,38 @@ def fix_rotation_of_image_from_metadata(image):
     return image
     
 
-def scale_down_landscape_image(image, LANDSCAPE_SIZE, scale_size=0.85):
+def scale_down_image(image, LANDSCAPE_SIZE, scale_size=0.85):
     new_size = tuple(int(size*scale_size) for size in LANDSCAPE_SIZE)
-    image_resized = image.resize(new_size)
-    return image_resized
+    return image.resize(new_size)
 
-def scale_down_portrait_image(image, PORTRAIT_SIZE, scale_size=0.85):
-    new_size = tuple(int(size*scale_size) for size in PORTRAIT_SIZE)
-    image_resized = image.resize(new_size)
-    return image_resized
+    
+
+
 
 def sort_images_by_date(image_paths):
-    images = []
-    for image_path in image_paths:
-        image = Image.open(image_path)
-        image = fix_rotation_of_image_from_metadata(image)
-        images.append(image)
+    def get_date(image):
+        try:
+            exif = image.getexif()
+            return exif[36867] if exif else '0000:00:00 00:00:00'  # Default to a very early date if not available
+        except KeyError:
+            return '0000:00:00 00:00:00'
 
-    try:
-        images.sort(key=lambda x: x._getexif()[36867])
-    
-    except (AttributeError, KeyError, IndexError):
-        # cases: image don't have getexif
-        pass
-    return images
+    # Open each image, fix its rotation, then store it with its path
+    images = []
+    for path in image_paths:
+        image = Image.open(path)
+        corrected_image = fix_rotation_of_image_from_metadata(image)  # Correcting the image orientation
+        images.append((corrected_image, path))
+
+    # Sort images by the date extracted from their EXIF data
+    images.sort(key=lambda img: get_date(img[0]))
+
+    # Return the list of sorted images without paths, as paths are no longer needed beyond this point
+    return [img for img, _ in images]
+
 
 def get_image_rotation(image):
-    if image.size[0] > image.size[1]:
-        return 1
-    else:
-        return 0
+    return 1 if image.size[0] > image.size[1] else 0
     
 def calculate_rotation_layout(images):
     rotation_layout = 0
@@ -77,14 +80,13 @@ def calculate_rotation_layout(images):
     return rotation_layout
 
 
-    
-def group_images_in_group_of_4(images):
-    grouped_images = [images[i:i+4] for i in range(0, len(images), 4)]
-    return grouped_images
 
-def group_images_in_group_of_6(images):
-    grouped_images = [images[i:i+6] for i in range(0, len(images), 6)]
-    return grouped_images
+    
+def group_images(images, group_size):
+    """
+    Groups images into chunks of a specified size.
+    """
+    return [images[i:i + group_size] for i in range(0, len(images), group_size)]
 
 #create a canvas, if case for each possible combination of images
 def create_canvas(grouped_images, LANDSCAPE_HEIGHT, LANDSCAPE_WIDTH):
@@ -94,80 +96,65 @@ def create_canvas(grouped_images, LANDSCAPE_HEIGHT, LANDSCAPE_WIDTH):
         canvases.append(canvas)
     return canvases
 
-def paste_images_on_canvas(canvases, grouped_images, LANDSCAPE_HEIGHT, LANDSCAPE_WIDTH, PORTRAIT_HEIGHT, PORTRAIT_WIDTH):
+
+def calculate_centers(canvas_width, canvas_height, num_images, margin=0.1):
+    canvas_width = canvas_width *2
+    canvas_height = canvas_height *2
+    centers = []
+    num_rows = int(round((num_images / (canvas_width / canvas_height)) ** 0.5))
+    num_columns = -(-num_images // num_rows)  # Ceiling division
+    partition_width = int(canvas_width / num_columns)
+    partition_height = int(canvas_height / num_rows)
+    for row in range(num_rows):
+        for col in range(num_columns):
+            center_x = int((col + 0.5) * partition_width)
+            center_y = int((row + 0.5) * partition_height)
+            centers.append((center_x, center_y))
+    return centers
+
+
+
+
+
+
+
+def paste_images_dynamically_on_canvas(canvases, grouped_images, LANDSCAPE_HEIGHT, LANDSCAPE_WIDTH, PORTRAIT_HEIGHT, PORTRAIT_WIDTH, num_images):
+    # Assuming calculate_centers and scale_down_image functions are correct
     for i, canvas in enumerate(canvases):
         images = grouped_images[i]
         scaled_images = []
+        # Dynamically adjust scale based on the number of images
+        total_images = len(images)
+        # Example dynamic scaling calculation (this formula is illustrative; adjust based on your needs)
+        scale_factor = max(0.45, 1 - total_images * 0.05)
         for image in images:
-            # Determine scaling based on image rotation
-            if get_image_rotation(image) == 1:  # Assuming 1 means landscape
-                scaled_image = scale_down_landscape_image(image, (LANDSCAPE_WIDTH, LANDSCAPE_HEIGHT),0.9)
-            else:  # Assuming 0 means portrait
-                scaled_image = scale_down_portrait_image(image, (PORTRAIT_WIDTH, PORTRAIT_HEIGHT), 0.75)
+            if get_image_rotation(image) == 1:  # Landscape
+                scaled_image = scale_down_image(image, (LANDSCAPE_WIDTH, LANDSCAPE_HEIGHT), scale_factor)
+            else:  # Portrait
+                scaled_image = scale_down_image(image, (PORTRAIT_WIDTH, PORTRAIT_HEIGHT),scale_factor)
             scaled_images.append(scaled_image)
 
-        # Correctly calculate the centering offset for each scaled image
-        #offsets = [(LANDSCAPE_WIDTH / 4 - scaled_image.width / 2, LANDSCAPE_HEIGHT / 4 - scaled_image.height / 2) for scaled_image in scaled_images]
-
-        # Adjust the calculation of positions for each image to be correctly centered in each quadrant
-        # Define the center points for each image
-        centers = [
-            (2000, 1500),  # Center for first image
-            (6000, 1500),  # Center for second image
-            (2000, 4500),  # Center for third image
-            (6000, 4500)   # Center for fourth image
-        ]
+        centers = calculate_centers(LANDSCAPE_WIDTH, LANDSCAPE_HEIGHT, len(images))
 
         positions = []
-        # Calculate the top-left corner for each image to center it at the specified points
-        for center, image in zip(centers, scaled_images):
-            top_left_x = center[0] - image.width // 2
-            top_left_y = center[1] - image.height // 2
+        for center, scaled_image in zip(centers, scaled_images):
+            top_left_x = center[0] - scaled_image.width // 2
+            top_left_y = center[1] - scaled_image.height // 2
             positions.append((top_left_x, top_left_y))
-            
-        # Paste each scaled image at the calculated centered position
+
+        # Debug output
+        #for position in positions:
+            #print("Position for pasting:", position)
+
         for j, scaled_image in enumerate(scaled_images):
-            canvas.paste(scaled_image, (int(positions[j][0]), int(positions[j][1])))
+            canvas.paste(scaled_image, positions[j])
+
 
     return canvases
 
 
-def paste_six_images_on_canvas(canvases, grouped_images, LANDSCAPE_HEIGHT, LANDSCAPE_WIDTH, PORTRAIT_HEIGHT, PORTRAIT_WIDTH):
-    for i, canvas in enumerate(canvases):
-        images = grouped_images[i]
-        scaled_images = []
-        for image in images:
-            # Determine scaling based on image rotation
-            if get_image_rotation(image) == 1:  # Assuming 1 means landscape
-                scaled_image = scale_down_landscape_image(image, (LANDSCAPE_WIDTH, LANDSCAPE_HEIGHT), 0.8)
-            else:  # Assuming 0 means portrait
-                scaled_image = scale_down_portrait_image(image, (PORTRAIT_WIDTH, PORTRAIT_HEIGHT), 0.75)
-            scaled_images.append(scaled_image)
 
-        # Define the center points for each image in a 2x3 grid layout
-        centers = [
-        # Row 1
-        (1333, 1500),  # First column, first row
-        (4000, 1500),  # Second column, first row
-        (6667, 1500),  # Third column, first row
-        # Row 2
-        (1333, 4500),  # First column, second row
-        (4000, 4500),  # Second column, second row
-        (6667, 4500),  # Third column, second row
-        ]
-
-        positions = []
-        # Calculate the top-left corner for each image to center it at the specified points
-        for center, image in zip(centers, scaled_images):
-            top_left_x = center[0] - image.width // 2
-            top_left_y = center[1] - image.height // 2
-            positions.append((top_left_x, top_left_y))
-            
-        # Paste each scaled image at the calculated centered position
-        for j, scaled_image in enumerate(scaled_images):
-            canvas.paste(scaled_image, (int(positions[j][0]), int(positions[j][1])))
-
-    return canvases
+    
 
 
 def save_canvas(canvases):
@@ -181,27 +168,38 @@ def save_canvas(canvases):
         print(f"Saved: {filename}")
 
 
-def main():
+
+
+
+
+
+
+
+
+
+
+
+def final_images():
     image_paths = get_directory()
+    image_height = int(input("Enter Image Height "))
+    image_width = int(input("Enter Width "))
+    number_of_images = int(input("Enter number of images per canvas "))
     images = sort_images_by_date(image_paths)
-    #canvases = create_canvas(group_images_in_group_of_4(images), LANDSCAPE_IMG_HEIGHT, LANDSCAPE_IMG_WIDTH)
-    #canvases = paste_images_on_canvas(canvases, group_images_in_group_of_4(images), LANDSCAPE_IMG_HEIGHT, LANDSCAPE_IMG_WIDTH, PORTRAIT_IMG_HEIGHT, PORTRAIT_IMG_WIDTH)
-    #save_canvas(canvases)
-    canvases = create_canvas(group_images_in_group_of_6(images), LANDSCAPE_IMG_HEIGHT, LANDSCAPE_IMG_WIDTH)
-    canvases = paste_six_images_on_canvas(canvases, group_images_in_group_of_6(images), LANDSCAPE_IMG_HEIGHT, LANDSCAPE_IMG_WIDTH, PORTRAIT_IMG_HEIGHT, PORTRAIT_IMG_WIDTH)
+    canvases = create_canvas(group_images(images,number_of_images),image_height,image_width)
+    canvases = paste_images_dynamically_on_canvas(canvases, group_images(images,number_of_images),image_height,image_width,image_width,image_height,number_of_images)
     save_canvas(canvases)
-main()
 
-                    
-                    
+if __name__ == "__main__":
+    final_images()
 
-    #case 4 portrait
 
-    #case 2 landscape, 2 portrait
 
-    #case 3 landscape 1 portrait
 
-    #case 3 portrait 1 landscape
+    
+
+
+
+
 
     
     
