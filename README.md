@@ -41,6 +41,6 @@ Feel free to fork this repository and submit pull requests to contribute to this
 Distributed under the MIT License. See LICENSE for more information.
 
 ## Contact
-- Project Link: https://github.com/PlazmaMamba/image_utils
+- Project Link: https://github.com/PlazmaMamba/python-image-collage-maker
 - Discord : PlazmaMamba#5365
 
