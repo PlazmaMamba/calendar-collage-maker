@@ -33,7 +33,7 @@ The script will then process the images, sort them, correct their orientation, s
 Feel free to fork this repository and submit pull requests to contribute to this project. For major changes, please open an issue first to discuss what you would like to change.
 
 ## To-Do
-- [ ] Improve running speed
+- [x] Improve running speed
 - [ ] Make the grid layout more flexible
 - [ ] Add better support for images with not 4:3 or 3:4 aspect ratios
 
